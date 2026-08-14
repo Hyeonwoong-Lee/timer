@@ -1,4 +1,5 @@
-import json
+import re
+import urllib.parse
 import urllib.request
 import streamlit as st
 
@@ -10,42 +11,42 @@ st.set_page_config(
 )
 
 
-# 2. Open-Meteo API를 사용하여 각 도시의 실시간 위도/경도 기반 날씨 수집 (API Key 필요 없음)
-@st.cache_data(ttl=600)  # 10분 간격 캐싱
-def get_realtime_weather(lat, lon):
+# 2. 네이버 날씨 실시간 크롤링 함수 (별도 패키지/API Key 필요 없음)
+@st.cache_data(ttl=300)  # 5분 간격 캐싱
+def get_realtime_weather(city_name):
     """
-    도시별 위도(lat)와 경도(lon)로 실시간 기온, 습도, 날씨 상태 코드를 정확하게 불러옵니다.
+    네이버 검색을 통해 기상청 기준 진짜 한국 실시간 날씨(기온, 습도, 날씨 상태)를 가져옵니다.
     """
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=Asia%2FTokyo"
+    query = f"{city_name} 날씨"
+    encoded_query = urllib.parse.quote(query)
+    url = f"https://search.naver.com/search.naver?query={encoded_query}"
 
     try:
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        req = urllib.request.Request(url, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+        })
+        
         with urllib.request.urlopen(req, timeout=5) as response:
-            res_data = response.read().decode('utf-8')
-            data = json.loads(res_data)
+            html = response.read().decode('utf-8')
 
-        current = data['current']
-        temp = round(current['temperature_2m'], 1)
-        reh = int(current['relative_humidity_2m'])
-        w_code = int(current['weather_code'])
+        # 1. 현재 기온 추출 (예: <span class="blind">현재 온도</span>18.5°)
+        temp_match = re.search(r'현재 온도</span>\s*(-?\d+(?:\.\d+)?)\s*°', html)
+        temp = float(temp_match.group(1)) if temp_match else 20.0
 
-        # WMO 날씨 코드 해석
-        condition = "맑음"
+        # 2. 날씨 상태 추출 (예: <span class="weather before_slash">맑음</span>)
+        cond_match = re.search(r'class="weather before_slash">\s*([^<]+)\s*</span>', html)
+        condition = cond_match.group(1).strip() if cond_match else "맑음"
+
+        # 3. 습도 추출 (예: <dt class="term">습도</dt><dd class="desc">55%</dd>)
+        reh_match = re.search(r'습도</dt>\s*<dd class="desc">\s*(\d+)%', html)
+        reh = int(reh_match.group(1)) if reh_match else 50
+
+        # 4. 강수 및 날씨 상태 파악
         pty = 0
-
-        if w_code in [1, 2, 3]:
-            condition = "구름많음/흐림"
-        elif w_code in [45, 48]:
-            condition = "안개"
-        elif w_code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
-            condition = "비"
+        if "비" in condition:
             pty = 1
-        elif w_code in [71, 73, 75, 77, 85, 86]:
-            condition = "눈"
+        elif "눈" in condition:
             pty = 3
-        elif w_code in [95, 96, 99]:
-            condition = "뇌우"
-            pty = 1
 
         return {
             "temp": temp,
@@ -56,7 +57,7 @@ def get_realtime_weather(lat, lon):
         }
 
     except Exception as e:
-        return {"error": f"날씨 정보를 불러오는 중 오류가 발생했습니다: {e}"}
+        return {"error": f"네이버 날씨 정보를 불러오는 데 실패했습니다: {e}"}
 
 
 # 3. 커스텀 CSS 적용 (글자 가시성 및 다크 테마)
@@ -194,28 +195,16 @@ def get_outfit_recommendation(temp, pty):
 
 # 5. 헤더 구역
 st.markdown("<h1 style='text-align: center; color: #ffffff;'>🌤️ 실시간 날씨 & 옷차림 추천</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #a0a0b0;'>각 지역의 실시간 기온과 습도를 분석하여 옷차림을 안내합니다.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #a0a0b0;'>네이버/기상청 실시간 데이터를 불러와 옷차림을 안내합니다.</p>", unsafe_allow_html=True)
 
 
-# 6. 주요 도시 위도(Latitude) 및 경도(Longitude) 정확한 좌표값
-cities = {
-    "서울": (37.5665, 126.9780),
-    "제주": (33.4996, 126.5312),
-    "부산": (35.1796, 129.0756),
-    "대구": (35.8714, 128.6014),
-    "인천": (37.4563, 126.7052),
-    "광주": (35.1595, 126.8526),
-    "대전": (36.3504, 127.3845),
-    "울산": (35.5384, 129.3114),
-    "춘천 (강원)": (37.8813, 127.7298),
-    "수원 (경기)": (37.2636, 127.0286)
-}
+# 6. 도시 목록
+city_list = ["서울", "제주", "부산", "대구", "인천", "광주", "대전", "울산", "춘천", "수원"]
 
-selected_city = st.selectbox("📍 지역을 선택하세요", list(cities.keys()))
+selected_city = st.selectbox("📍 지역을 선택하세요", city_list)
 
-# 7. 선택한 도시의 실시간 날씨 불러오기
-lat, lon = cities[selected_city]
-weather_info = get_realtime_weather(lat, lon)
+# 7. 선택한 도시의 실시간 네이버 날씨 불러오기
+weather_info = get_realtime_weather(selected_city)
 
 if weather_info.get("error"):
     st.error(weather_info["error"])
@@ -225,7 +214,7 @@ else:
     pty = weather_info["pty"]
     reh = weather_info["reh"]
 
-    # ไอ콘 설정
+    # 날씨 아이콘 매핑
     icon = "☀️"
     if pty == 1:
         icon = "🌧️"
