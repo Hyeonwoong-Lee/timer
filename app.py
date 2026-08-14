@@ -3,13 +3,12 @@ import streamlit as st
 
 # 1. 페이지 기본 설정 (타이틀, 레이아웃, 아이콘)
 st.set_page_config(
-    page_title="⏱️ 나만의 반응형 타이머",
+    page_title="⏱️ 나만의 다크테마 타이머",
     page_icon="⏱️",
     layout="centered"
 )
 
 # 2. 세션 상태(Session State) 초기화
-# 앱이 새로고침되어도 변수 값이 유지되도록 설정합니다.
 if "running" not in st.session_state:
     st.session_state.running = False  # 타이머 실행 여부
 if "paused" not in st.session_state:
@@ -30,36 +29,55 @@ if "input_seconds" not in st.session_state:
     st.session_state.input_seconds = 0  # 입력창 기본 초
 
 
-# 3. 반응형 CSS 스타일 적용
-# clamp()를 활용하여 화면 크기에 따라 글자 크기가 자연스럽게 조절됩니다.
+# 3. 다크 테마 커스텀 CSS 스타일 적용
 st.markdown("""
     <style>
-    /* 카드를 중앙에 배치하고 깔끔한 배경을 만듭니다 */
+    /* 전체 배경을 어둡게 설정 */
+    .stApp {
+        background-color: #121218;
+        color: #e0e0e0;
+    }
+    
+    /* 어두운 카드 스타일 (네온 글로우 효과 추가) */
     .timer-card {
-        background-color: #ffffff;
+        background-color: #1e1e2e;
         border-radius: 20px;
         padding: 2rem;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
-        border: 1px solid #eef2f6;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5), 0 0 15px rgba(0, 242, 254, 0.1);
+        border: 1px solid #2d2d3f;
         text-align: center;
         margin-bottom: 1.5rem;
     }
     
-    /* 화면 크기에 따라 유연하게 조절되는 큼직한 타이머 텍스트 */
+    /* 다크 테마 전용 네온 스타일 타이머 텍스트 */
     .timer-display {
-        font-size: clamp(3rem, 12vw, 6rem);
+        font-size: clamp(3.5rem, 13vw, 6.5rem);
         font-weight: 800;
-        color: #2c3e50;
+        color: #00f2fe;
+        text-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
         font-family: 'Courier New', Courier, monospace;
-        letter-spacing: 2px;
+        letter-spacing: 3px;
         margin: 1rem 0;
     }
-    
-    /* 모바일 버튼 간격 개선 */
+
+    /* 입력 폼 라벨 글자 색상 수정 */
+    .stNumberInput label {
+        color: #b0b0c0 !important;
+    }
+
+    /* 버튼 스타일 다크모드 최적화 */
     .stButton > button {
         border-radius: 10px;
         font-weight: bold;
         transition: all 0.2s ease;
+        background-color: #2b2b3d;
+        color: #ffffff;
+        border: 1px solid #3d3d52;
+    }
+    .stButton > button:hover {
+        background-color: #3b3b54;
+        border-color: #00f2fe;
+        color: #00f2fe;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -73,9 +91,9 @@ def set_quick_time(minutes):
         st.session_state.input_seconds = 0
 
 
-# 5. 메인 앱 UI 헤더
-st.markdown("<h1 style='text-align: center; color: #2c3e50;'>⏱️ 나만의 반응형 타이머</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #7f8c8d;'>스마트폰, 태블릿, PC 어디서나 정확한 카운트다운!</p>", unsafe_allow_html=True)
+# 5. 메인 앱 UI 헤더 (다크모드용 밝은 제목 글자)
+st.markdown("<h1 style='text-align: center; color: #ffffff;'>⏱️ 나만의 다크테마 타이머</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #a0a0b0;'>눈이 편안한 다크모드 반응형 카운트다운!</p>", unsafe_allow_html=True)
 
 # 카드 형태의 컨테이너 시작
 with st.container():
@@ -87,7 +105,7 @@ with st.container():
     is_disabled = st.session_state.running or st.session_state.paused
 
     # 1분, 3분, 5분, 10분 빠른 설정 버튼
-    st.write("⚡ **빠른 시간 설정**")
+    st.markdown("<p style='color: #d0d0e0; font-weight: bold;'>⚡ 빠른 시간 설정</p>", unsafe_allow_html=True)
     q_col1, q_col2, q_col3, q_col4 = st.columns(4)
     with q_col1:
         if st.button("1분", use_container_width=True, disabled=is_disabled):
@@ -133,7 +151,6 @@ with st.container():
         
         st.session_state.total_seconds = total
         st.session_state.remaining_seconds = total
-        # time.monotonic()으로 절대 시점을 저장하여 오차를 방지합니다.
         st.session_state.end_time = time.monotonic() + total
         st.session_state.running = True
         st.session_state.paused = False
@@ -149,7 +166,6 @@ with st.container():
     def resume_timer():
         """일시정지된 타이머를 다시 진행합니다."""
         if st.session_state.paused:
-            # 일시정지되어 있던 시간만큼 종료 예정 시간을 뒤로 밀어줍니다.
             paused_duration = time.monotonic() - st.session_state.pause_start_time
             st.session_state.end_time += paused_duration
             st.session_state.paused = False
@@ -165,7 +181,7 @@ with st.container():
         st.session_state.end_time = None
 
     # ----------------------------------------------------
-    # [제어 버튼 구역] (모바일 대응 2x2 또는 4열 배치)
+    # [제어 버튼 구역]
     # ----------------------------------------------------
     st.write("")
     btn_col1, btn_col2, btn_col3, btn_col4 = st.columns([1, 1, 1, 1])
@@ -183,34 +199,29 @@ with st.container():
 
     # ----------------------------------------------------
     # [실시간 타이머 디스플레이 구역 (st.fragment 사용)]
-    # run_every=0.1s 로 0.1초마다 이 구역만 부드럽게 재실행됩니다.
     # ----------------------------------------------------
     @st.fragment(run_every=0.1 if st.session_state.running else None)
     def render_timer():
-        # 타이머 진행 중 정밀 시간 계산
         if st.session_state.running and st.session_state.end_time:
             now = time.monotonic()
             rem = max(0, int(st.session_state.end_time - now))
             st.session_state.remaining_seconds = rem
 
-            # 시간이 다 되었을 때 처리
             if rem <= 0:
                 st.session_state.running = False
                 st.session_state.completed = True
 
-        # 표시용 분/초 계산
         rem_sec = st.session_state.remaining_seconds
         display_m = rem_sec // 60
         display_s = rem_sec % 60
         time_str = f"{display_m:02d}:{display_s:02d}"
 
-        # 큰 디지털 시계 표시
+        # 큰 네온 타이머 시계 표시
         st.markdown(f'<div class="timer-display">{time_str}</div>', unsafe_allow_html=True)
 
         # 진행률 막대(Progress Bar) 표시
         if st.session_state.total_seconds > 0:
             progress = rem_sec / st.session_state.total_seconds
-            # 0.0 ~ 1.0 범위 보정
             progress = max(0.0, min(1.0, progress))
             st.progress(progress)
         else:
