@@ -69,16 +69,16 @@ def get_realtime_weather(nx, ny):
         }
 
 
-# 3. 버튼 글씨가 선명하게 보이도록 커스텀 CSS 수정
+# 3. 습도 및 날씨 정보 가시성을 높인 커스텀 CSS 적용
 st.markdown("""
     <style>
-    /* 앱 전체 배경 및 기본 글자색 */
+    /* 앱 전체 배경 */
     .stApp {
         background-color: #121218;
         color: #ffffff;
     }
 
-    /* [해결 원인] Streamlit 버튼 가시성 보장 CSS */
+    /* Streamlit 기본 버튼 가시성 보장 */
     div[data-testid="stButton"] > button {
         background-color: #2b2b3d !important;
         color: #00f2fe !important;
@@ -90,14 +90,13 @@ st.markdown("""
         transition: all 0.3s ease !important;
     }
 
-    /* 버튼 마우스 호버 시 효과 */
     div[data-testid="stButton"] > button:hover {
         background-color: #00f2fe !important;
         color: #121218 !important;
         box-shadow: 0 0 15px rgba(0, 242, 254, 0.5) !important;
     }
 
-    /* 날씨 카드 디자인 */
+    /* 메인 날씨 카드 디자인 */
     .weather-card {
         background-color: #1e1e2e;
         border-radius: 20px;
@@ -115,6 +114,28 @@ st.markdown("""
         color: #00f2fe;
         text-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
         margin: 0.5rem 0;
+    }
+
+    /* 습도/상태 정보 상자 (글자 가시성 해결) */
+    .info-badge {
+        background-color: #2b2b3d;
+        border-radius: 12px;
+        padding: 0.8rem 1.2rem;
+        display: inline-block;
+        margin: 0.5rem;
+        border: 1px solid #3d3d52;
+    }
+
+    .info-label {
+        font-size: 0.95rem;
+        color: #a0a0b0;
+        margin-bottom: 0.2rem;
+    }
+
+    .info-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #ffffff; /* 선명한 흰색 */
     }
 
     /* 코디 추천 박스 */
@@ -228,9 +249,20 @@ else:
 
         st.markdown(f"<h3>{selected_city} 실시간 날씨</h3>", unsafe_allow_html=True)
         st.markdown(f'<div class="temp-display">{icon} {temp}°C</div>', unsafe_allow_html=True)
-        st.markdown(f"<p style='font-size: 1.3rem; color: #d0d0e0;'>상태: <b>{condition}</b></p>", unsafe_allow_html=True)
 
-        st.metric("💧 현재 습도", f"{reh}%")
+        # [개선] 습도 및 날씨 상태 정보를 명확하게 잘 보이는 커스텀 배지로 표시
+        st.markdown(f"""
+            <div style="margin: 1rem 0;">
+                <div class="info-badge">
+                    <div class="info-label">🌤️ 날씨 상태</div>
+                    <div class="info-value">{condition}</div>
+                </div>
+                <div class="info-badge">
+                    <div class="info-label">💧 현재 습도</div>
+                    <div class="info-value" style="color: #00f2fe;">{reh}%</div>
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
 
         # 옷차림 추천
         outfits, tip_message = get_outfit_recommendation(temp, pty)
@@ -250,7 +282,7 @@ else:
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 마우스를 올리지 않아도 글씨가 뚜렷하게 보이도록 수정된 버튼
+    # 실시간 날씨 새로고침 버튼
     if st.button("🔄 실시간 날씨 새로고침", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
