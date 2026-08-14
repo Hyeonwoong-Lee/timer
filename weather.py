@@ -1,6 +1,5 @@
 import json
 import urllib.request
-import datetime
 import streamlit as st
 
 # 1. 페이지 기본 설정
@@ -11,24 +10,13 @@ st.set_page_config(
 )
 
 
-# 2. 기상청 초단기실황 API를 통해 날씨 데이터를 직접 수집하는 함수
+# 2. Open-Meteo API를 사용하여 각 도시의 실시간 위도/경도 기반 날씨 수집 (API Key 필요 없음)
 @st.cache_data(ttl=600)  # 10분 간격 캐싱
-def get_realtime_weather(nx, ny):
+def get_realtime_weather(lat, lon):
     """
-    기상청 초단기실황 Open API (JSON)를 사용해 실시간 기온, 강수, 습도를 불러옵니다.
+    도시별 위도(lat)와 경도(lon)로 실시간 기온, 습도, 날씨 상태 코드를 정확하게 불러옵니다.
     """
-    now = datetime.datetime.now()
-    if now.minute < 40:  # 매시 40분 이전이면 1시간 전 데이터를 조회
-        now = now - datetime.timedelta(hours=1)
-    
-    base_date = now.strftime("%Y%m%d")
-    base_time = now.strftime("%H00")
-
-    service_key = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst"
-    url = (
-        f"{service_key}?serviceKey=d%2B%2B1K%2FR3gY7YV4p2M2%2BfU%2Fw9L23mN%2BFf6I6m3V%2B5f%2B4%3D"
-        f"&pageNo=1&numOfRows=10&dataType=JSON&base_date={base_date}&base_time={base_time}&nx={nx}&ny={ny}"
-    )
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current=temperature_2m,relative_humidity_2m,weather_code&timezone=Asia%2FTokyo"
 
     try:
         req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -36,20 +24,28 @@ def get_realtime_weather(nx, ny):
             res_data = response.read().decode('utf-8')
             data = json.loads(res_data)
 
-        items = data['response']['body']['items']['item']
-        
-        weather_dict = {}
-        for item in items:
-            category = item['category']
-            value = float(item['obsrValue'])
-            weather_dict[category] = value
+        current = data['current']
+        temp = round(current['temperature_2m'], 1)
+        reh = int(current['relative_humidity_2m'])
+        w_code = int(current['weather_code'])
 
-        temp = weather_dict.get('T1H', 20.0)
-        reh = int(weather_dict.get('REH', 50))
-        pty = int(weather_dict.get('PTY', 0))
+        # WMO 날씨 코드 해석
+        condition = "맑음"
+        pty = 0
 
-        pty_map = {0: "맑음/구름", 1: "비", 2: "비/눈", 3: "눈", 5: "빗방울", 6: "진눈깨비", 7: "눈날림"}
-        condition = pty_map.get(pty, "맑음")
+        if w_code in [1, 2, 3]:
+            condition = "구름많음/흐림"
+        elif w_code in [45, 48]:
+            condition = "안개"
+        elif w_code in [51, 53, 55, 61, 63, 65, 80, 81, 82]:
+            condition = "비"
+            pty = 1
+        elif w_code in [71, 73, 75, 77, 85, 86]:
+            condition = "눈"
+            pty = 3
+        elif w_code in [95, 96, 99]:
+            condition = "뇌우"
+            pty = 1
 
         return {
             "temp": temp,
@@ -59,26 +55,20 @@ def get_realtime_weather(nx, ny):
             "error": None
         }
 
-    except Exception:
-        return {
-            "temp": 21.5,
-            "condition": "맑음",
-            "pty": 0,
-            "reh": 55,
-            "error": None
-        }
+    except Exception as e:
+        return {"error": f"날씨 정보를 불러오는 중 오류가 발생했습니다: {e}"}
 
 
-# 3. 습도 및 날씨 정보 가시성을 높인 커스텀 CSS 적용
+# 3. 커스텀 CSS 적용 (글자 가시성 및 다크 테마)
 st.markdown("""
     <style>
-    /* 앱 전체 배경 */
+    /* 전체 배경 */
     .stApp {
         background-color: #121218;
         color: #ffffff;
     }
 
-    /* Streamlit 기본 버튼 가시성 보장 */
+    /* Streamlit 기본 버튼 스타일 */
     div[data-testid="stButton"] > button {
         background-color: #2b2b3d !important;
         color: #00f2fe !important;
@@ -96,7 +86,7 @@ st.markdown("""
         box-shadow: 0 0 15px rgba(0, 242, 254, 0.5) !important;
     }
 
-    /* 메인 날씨 카드 디자인 */
+    /* 카드 디자인 */
     .weather-card {
         background-color: #1e1e2e;
         border-radius: 20px;
@@ -107,7 +97,7 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
-    /* 온도 텍스트 */
+    /* 온점 큰 글씨 */
     .temp-display {
         font-size: clamp(3.5rem, 12vw, 5.5rem);
         font-weight: 800;
@@ -116,7 +106,7 @@ st.markdown("""
         margin: 0.5rem 0;
     }
 
-    /* 습도/상태 정보 상자 (글자 가시성 해결) */
+    /* 정보 배지 */
     .info-badge {
         background-color: #2b2b3d;
         border-radius: 12px;
@@ -135,10 +125,10 @@ st.markdown("""
     .info-value {
         font-size: 1.5rem;
         font-weight: bold;
-        color: #ffffff; /* 선명한 흰색 */
+        color: #ffffff;
     }
 
-    /* 코디 추천 박스 */
+    /* 추천 상자 */
     .recommend-box {
         background-color: #2b2b3d;
         border-radius: 15px;
@@ -194,38 +184,38 @@ def get_outfit_recommendation(temp, pty):
         outfit = ["두꺼운 패딩", "코트", "목도리", "기모 의류", "장갑"]
         tip = "한파 주의! 방한 용품과 두꺼운 겉옷을 꼭 챙기세요."
 
-    if pty in [1, 2, 5, 6]:
+    if pty == 1:
         tip += " ☔ 비 소식이 있으니 우산을 꼭 챙기세요!"
-    elif pty in [3, 7]:
-        tip += " ❄️ 눈이 오거나 날리니 미끄러지지 않는 신발을 신으세요!"
+    elif pty == 3:
+        tip += " ❄️ 눈 소식이 있으니 미끄러지지 않는 신발을 신으세요!"
 
     return outfit, tip
 
 
 # 5. 헤더 구역
 st.markdown("<h1 style='text-align: center; color: #ffffff;'>🌤️ 실시간 날씨 & 옷차림 추천</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #a0a0b0;'>기상청 실시간 데이터를 직접 불러와 오늘의 코디를 추천해 드립니다.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #a0a0b0;'>각 지역의 실시간 기온과 습도를 분석하여 옷차림을 안내합니다.</p>", unsafe_allow_html=True)
 
 
-# 6. 주요 도시 기상청 격자 좌표(NX, NY) 매핑
+# 6. 주요 도시 위도(Latitude) 및 경도(Longitude) 정확한 좌표값
 cities = {
-    "서울 (종로구)": (60, 127),
-    "제주 (제주시)": (52, 38),
-    "부산 (중구)": (98, 76),
-    "대구 (중구)": (89, 90),
-    "인천 (중구)": (55, 124),
-    "광주 (동구)": (58, 74),
-    "대전 (중구)": (67, 100),
-    "울산 (중구)": (102, 84),
-    "강원 (춘천시)": (73, 134),
-    "경기 (수원시)": (60, 120)
+    "서울": (37.5665, 126.9780),
+    "제주": (33.4996, 126.5312),
+    "부산": (35.1796, 129.0756),
+    "대구": (35.8714, 128.6014),
+    "인천": (37.4563, 126.7052),
+    "광주": (35.1595, 126.8526),
+    "대전": (36.3504, 127.3845),
+    "울산": (35.5384, 129.3114),
+    "춘천 (강원)": (37.8813, 127.7298),
+    "수원 (경기)": (37.2636, 127.0286)
 }
 
 selected_city = st.selectbox("📍 지역을 선택하세요", list(cities.keys()))
 
-# 7. 선택한 지역의 실시간 날씨 불러오기
-nx, ny = cities[selected_city]
-weather_info = get_realtime_weather(nx, ny)
+# 7. 선택한 도시의 실시간 날씨 불러오기
+lat, lon = cities[selected_city]
+weather_info = get_realtime_weather(lat, lon)
 
 if weather_info.get("error"):
     st.error(weather_info["error"])
@@ -235,10 +225,11 @@ else:
     pty = weather_info["pty"]
     reh = weather_info["reh"]
 
+    # ไอ콘 설정
     icon = "☀️"
-    if pty in [1, 2, 5, 6]:
+    if pty == 1:
         icon = "🌧️"
-    elif pty in [3, 7]:
+    elif pty == 3:
         icon = "❄️"
     elif "구름" in condition or "흐림" in condition:
         icon = "⛅"
@@ -250,7 +241,6 @@ else:
         st.markdown(f"<h3>{selected_city} 실시간 날씨</h3>", unsafe_allow_html=True)
         st.markdown(f'<div class="temp-display">{icon} {temp}°C</div>', unsafe_allow_html=True)
 
-        # [개선] 습도 및 날씨 상태 정보를 명확하게 잘 보이는 커스텀 배지로 표시
         st.markdown(f"""
             <div style="margin: 1rem 0;">
                 <div class="info-badge">
