@@ -1,162 +1,227 @@
-import streamlit as st
 import time
+import streamlit as st
 
-# --- 1. 페이지 기본 설정 ---
-st.set_page_config(page_title="나만의 반응형 타이머", page_icon="⏱️", layout="centered")
+# 1. 페이지 기본 설정 (타이틀, 레이아웃, 아이콘)
+st.set_page_config(
+    page_title="⏱️ 나만의 반응형 타이머",
+    page_icon="⏱️",
+    layout="centered"
+)
 
-# --- 2. CSS 스타일 적용 (다크 테마용 반응형 디자인) ---
+# 2. 세션 상태(Session State) 초기화
+# 앱이 새로고침되어도 변수 값이 유지되도록 설정합니다.
+if "running" not in st.session_state:
+    st.session_state.running = False  # 타이머 실행 여부
+if "paused" not in st.session_state:
+    st.session_state.paused = False  # 일시정지 여부
+if "total_seconds" not in st.session_state:
+    st.session_state.total_seconds = 0  # 전체 설정 시간(초)
+if "remaining_seconds" not in st.session_state:
+    st.session_state.remaining_seconds = 0  # 남은 시간(초)
+if "end_time" not in st.session_state:
+    st.session_state.end_time = None  # 종료 예정 기준 시간 (time.monotonic 기준)
+if "pause_start_time" not in st.session_state:
+    st.session_state.pause_start_time = None  # 일시정지 시작 시간
+if "completed" not in st.session_state:
+    st.session_state.completed = False  # 타이머 완료 여부
+if "input_minutes" not in st.session_state:
+    st.session_state.input_minutes = 1  # 입력창 기본 분
+if "input_seconds" not in st.session_state:
+    st.session_state.input_seconds = 0  # 입력창 기본 초
+
+
+# 3. 반응형 CSS 스타일 적용
+# clamp()를 활용하여 화면 크기에 따라 글자 크기가 자연스럽게 조절됩니다.
 st.markdown("""
     <style>
-    /* 다크 테마에 어울리는 진한 회색 카드 디자인 */
+    /* 카드를 중앙에 배치하고 깔끔한 배경을 만듭니다 */
     .timer-card {
-        background-color: #2b2b2b; /* 진한 회색 배경 */
-        border: 1px solid #444444; /* 테두리를 살짝 주어 입체감 부여 */
+        background-color: #ffffff;
         border-radius: 20px;
-        padding: 30px;
+        padding: 2rem;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+        border: 1px solid #eef2f6;
         text-align: center;
-        box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.5); /* 그림자를 더 크고 진하게 설정 */
-        margin: 20px 0;
+        margin-bottom: 1.5rem;
     }
     
-    /* 글자 색상을 밝게 하고 크기를 자동으로 조절 */
-    .timer-text {
-        color: #ffffff; /* 글자를 순백색으로 설정 */
-        text-shadow: 0px 2px 10px rgba(255, 255, 255, 0.2); /* 글자에 살짝 빛나는 효과 */
-        font-size: clamp(4rem, 15vw, 8rem);
-        font-weight: 900;
-        margin-bottom: 20px;
-        font-variant-numeric: tabular-nums; 
+    /* 화면 크기에 따라 유연하게 조절되는 큼직한 타이머 텍스트 */
+    .timer-display {
+        font-size: clamp(3rem, 12vw, 6rem);
+        font-weight: 800;
+        color: #2c3e50;
+        font-family: 'Courier New', Courier, monospace;
+        letter-spacing: 2px;
+        margin: 1rem 0;
+    }
+    
+    /* 모바일 버튼 간격 개선 */
+    .stButton > button {
+        border-radius: 10px;
+        font-weight: bold;
+        transition: all 0.2s ease;
     }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. 상태 저장소(Session State) 초기화 ---
-if 'status' not in st.session_state:
-    st.session_state.status = 'stopped'  
-if 'total_seconds' not in st.session_state:
-    st.session_state.total_seconds = 0   
-if 'remaining_seconds' not in st.session_state:
-    st.session_state.remaining_seconds = 0 
-if 'end_time' not in st.session_state:
-    st.session_state.end_time = 0.0      
-if 'balloons_shown' not in st.session_state:
-    st.session_state.balloons_shown = False 
-if 'input_min' not in st.session_state:
-    st.session_state.input_min = 0       
-if 'input_sec' not in st.session_state:
-    st.session_state.input_sec = 0       
 
-# --- 4. 타이머 제어 함수들 ---
-def start_timer():
-    total_sec = (st.session_state.input_min * 60) + st.session_state.input_sec
-    if total_sec <= 0:
-        st.warning("0초 이상으로 시간을 설정해 주세요!")
-        return
-    st.session_state.total_seconds = total_sec
-    st.session_state.remaining_seconds = total_sec
-    st.session_state.end_time = time.monotonic() + total_sec
-    st.session_state.status = 'running'
-    st.session_state.balloons_shown = False 
-
-def pause_timer():
-    st.session_state.status = 'paused'
-    st.session_state.remaining_seconds = max(0, st.session_state.end_time - time.monotonic())
-
-def resume_timer():
-    st.session_state.status = 'running'
-    st.session_state.end_time = time.monotonic() + st.session_state.remaining_seconds
-
-def reset_timer():
-    st.session_state.status = 'stopped'
-    st.session_state.remaining_seconds = 0
-    st.session_state.total_seconds = 0
-
+# 4. 빠른 설정 버튼 클릭 시 동작하는 함수
 def set_quick_time(minutes):
-    st.session_state.input_min = minutes
-    st.session_state.input_sec = 0
+    """지정된 분 단위로 타이머 시간을 세팅합니다."""
+    if not st.session_state.running:
+        st.session_state.input_minutes = minutes
+        st.session_state.input_seconds = 0
 
-# --- 5. UI 화면 구성 ---
-st.title("⏱️ 나만의 반응형 타이머 (다크 테마)")
 
-is_disabled = st.session_state.status in ['running', 'paused']
+# 5. 메인 앱 UI 헤더
+st.markdown("<h1 style='text-align: center; color: #2c3e50;'>⏱️ 나만의 반응형 타이머</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #7f8c8d;'>스마트폰, 태블릿, PC 어디서나 정확한 카운트다운!</p>", unsafe_allow_html=True)
 
-# (1) 시간 설정 영역
-col1, col2 = st.columns(2)
-with col1:
-    st.number_input("분 (Minutes)", min_value=0, max_value=999, step=1, 
-                    key="input_min", disabled=is_disabled)
-with col2:
-    st.number_input("초 (Seconds)", min_value=0, max_value=59, step=1, 
-                    key="input_sec", disabled=is_disabled)
+# 카드 형태의 컨테이너 시작
+with st.container():
+    st.markdown('<div class="timer-card">', unsafe_allow_html=True)
 
-# (2) 빠른 설정 버튼 영역 
-st.caption("⚡ 빠른 설정")
-q_col1, q_col2, q_col3, q_col4 = st.columns(4)
-with q_col1:
-    if st.button("1분", use_container_width=True, disabled=is_disabled): set_quick_time(1)
-with q_col2:
-    if st.button("3분", use_container_width=True, disabled=is_disabled): set_quick_time(3)
-with q_col3:
-    if st.button("5분", use_container_width=True, disabled=is_disabled): set_quick_time(5)
-with q_col4:
-    if st.button("10분", use_container_width=True, disabled=is_disabled): set_quick_time(10)
+    # ----------------------------------------------------
+    # [입력 및 빠른 설정 구역] - 타이머 동작 중에는 비활성화
+    # ----------------------------------------------------
+    is_disabled = st.session_state.running or st.session_state.paused
 
-st.divider() 
+    # 1분, 3분, 5분, 10분 빠른 설정 버튼
+    st.write("⚡ **빠른 시간 설정**")
+    q_col1, q_col2, q_col3, q_col4 = st.columns(4)
+    with q_col1:
+        if st.button("1분", use_container_width=True, disabled=is_disabled):
+            set_quick_time(1)
+    with q_col2:
+        if st.button("3분", use_container_width=True, disabled=is_disabled):
+            set_quick_time(3)
+    with q_col3:
+        if st.button("5분", use_container_width=True, disabled=is_disabled):
+            set_quick_time(5)
+    with q_col4:
+        if st.button("10분", use_container_width=True, disabled=is_disabled):
+            set_quick_time(10)
 
-# (3) 제어 버튼 영역
-c_col1, c_col2, c_col3 = st.columns(3)
+    # 분/초 수동 입력창
+    col_m, col_s = st.columns(2)
+    with col_m:
+        minutes = st.number_input(
+            "분 (Minutes)",
+            min_value=0,
+            max_value=180,
+            key="input_minutes",
+            disabled=is_disabled
+        )
+    with col_s:
+        seconds = st.number_input(
+            "초 (Seconds)",
+            min_value=0,
+            max_value=59,
+            key="input_seconds",
+            disabled=is_disabled
+        )
 
-with c_col1:
-    if st.session_state.status in ['stopped', 'completed']:
-        if st.button("▶️ 시작", use_container_width=True, type="primary"):
-            start_timer()
-    elif st.session_state.status == 'running':
-        if st.button("⏸️ 일시정지", use_container_width=True):
-            pause_timer()
-    elif st.session_state.status == 'paused':
-        if st.button("▶️ 계속", use_container_width=True, type="primary"):
-            resume_timer()
-
-with c_col3:
-    if st.session_state.status in ['running', 'paused', 'completed']:
-        if st.button("🔄 초기화", use_container_width=True):
-            reset_timer()
-
-# --- 6. 화면 자동 새로고침(Fragment) 영역 ---
-@st.fragment(run_every=1)
-def display_timer():
-    if st.session_state.status == 'running':
-        now = time.monotonic()
-        left = st.session_state.end_time - now
+    # ----------------------------------------------------
+    # [시간 계산 및 타이머 실행 함수 정의]
+    # ----------------------------------------------------
+    def start_timer():
+        """타이머를 최초 시작합니다."""
+        total = minutes * 60 + seconds
+        if total <= 0:
+            st.error("⚠️ 0초보다 큰 시간을 설정해 주세요!")
+            return
         
-        if left <= 0:
-            st.session_state.status = 'completed'
-            st.session_state.remaining_seconds = 0
-            if not st.session_state.balloons_shown:
-                st.balloons() 
-                st.session_state.balloons_shown = True
+        st.session_state.total_seconds = total
+        st.session_state.remaining_seconds = total
+        # time.monotonic()으로 절대 시점을 저장하여 오차를 방지합니다.
+        st.session_state.end_time = time.monotonic() + total
+        st.session_state.running = True
+        st.session_state.paused = False
+        st.session_state.completed = False
+
+    def pause_timer():
+        """타이머를 일시정지합니다."""
+        if st.session_state.running and not st.session_state.paused:
+            st.session_state.paused = True
+            st.session_state.running = False
+            st.session_state.pause_start_time = time.monotonic()
+
+    def resume_timer():
+        """일시정지된 타이머를 다시 진행합니다."""
+        if st.session_state.paused:
+            # 일시정지되어 있던 시간만큼 종료 예정 시간을 뒤로 밀어줍니다.
+            paused_duration = time.monotonic() - st.session_state.pause_start_time
+            st.session_state.end_time += paused_duration
+            st.session_state.paused = False
+            st.session_state.running = True
+
+    def reset_timer():
+        """타이머를 초기화합니다."""
+        st.session_state.running = False
+        st.session_state.paused = False
+        st.session_state.completed = False
+        st.session_state.total_seconds = 0
+        st.session_state.remaining_seconds = 0
+        st.session_state.end_time = None
+
+    # ----------------------------------------------------
+    # [제어 버튼 구역] (모바일 대응 2x2 또는 4열 배치)
+    # ----------------------------------------------------
+    st.write("")
+    btn_col1, btn_col2, btn_col3, btn_col4 = st.columns([1, 1, 1, 1])
+
+    with btn_col1:
+        if not st.session_state.running and not st.session_state.paused:
+            st.button("▶️ 시작", on_click=start_timer, type="primary", use_container_width=True)
+        elif st.session_state.running:
+            st.button("⏸️ 일시정지", on_click=pause_timer, use_container_width=True)
+        elif st.session_state.paused:
+            st.button("▶️ 계속", on_click=resume_timer, type="primary", use_container_width=True)
+
+    with btn_col2:
+        st.button("🔄 초기화", on_click=reset_timer, use_container_width=True)
+
+    # ----------------------------------------------------
+    # [실시간 타이머 디스플레이 구역 (st.fragment 사용)]
+    # run_every=0.1s 로 0.1초마다 이 구역만 부드럽게 재실행됩니다.
+    # ----------------------------------------------------
+    @st.fragment(run_every=0.1 if st.session_state.running else None)
+    def render_timer():
+        # 타이머 진행 중 정밀 시간 계산
+        if st.session_state.running and st.session_state.end_time:
+            now = time.monotonic()
+            rem = max(0, int(st.session_state.end_time - now))
+            st.session_state.remaining_seconds = rem
+
+            # 시간이 다 되었을 때 처리
+            if rem <= 0:
+                st.session_state.running = False
+                st.session_state.completed = True
+
+        # 표시용 분/초 계산
+        rem_sec = st.session_state.remaining_seconds
+        display_m = rem_sec // 60
+        display_s = rem_sec % 60
+        time_str = f"{display_m:02d}:{display_s:02d}"
+
+        # 큰 디지털 시계 표시
+        st.markdown(f'<div class="timer-display">{time_str}</div>', unsafe_allow_html=True)
+
+        # 진행률 막대(Progress Bar) 표시
+        if st.session_state.total_seconds > 0:
+            progress = rem_sec / st.session_state.total_seconds
+            # 0.0 ~ 1.0 범위 보정
+            progress = max(0.0, min(1.0, progress))
+            st.progress(progress)
         else:
-            st.session_state.remaining_seconds = left
+            st.progress(1.0)
 
-    left_sec = st.session_state.remaining_seconds
-    mins = int(left_sec // 60)
-    secs = int(left_sec % 60)
+        # 타이머 완료 시 효과 및 축하 메시지
+        if st.session_state.completed:
+            st.balloons()
+            st.success("🎉 설정한 시간이 완료되었습니다!")
 
-    st.markdown(f"""
-        <div class="timer-card">
-            <div class="timer-text">{mins:02d}:{secs:02d}</div>
-        </div>
-    """, unsafe_allow_html=True)
+    # 실시간 프래그먼트 호출
+    render_timer()
 
-    if st.session_state.total_seconds > 0:
-        progress_val = left_sec / st.session_state.total_seconds
-        progress_val = max(0.0, min(1.0, progress_val)) 
-    else:
-        progress_val = 0.0
-    
-    st.progress(progress_val)
-
-    if st.session_state.status == 'completed':
-        st.success("🎉 시간이 다 되었습니다! 수고하셨어요.")
-
-display_timer()
+    st.markdown('</div>', unsafe_allow_html=True)
