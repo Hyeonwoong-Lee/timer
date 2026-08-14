@@ -17,7 +17,6 @@ def get_realtime_weather(nx, ny):
     """
     기상청 초단기실황 Open API (JSON)를 사용해 실시간 기온, 강수, 습도를 불러옵니다.
     """
-    # 현재 날짜 및 발표 시간 기준 설정
     now = datetime.datetime.now()
     if now.minute < 40:  # 매시 40분 이전이면 1시간 전 데이터를 조회
         now = now - datetime.timedelta(hours=1)
@@ -25,7 +24,6 @@ def get_realtime_weather(nx, ny):
     base_date = now.strftime("%Y%m%d")
     base_time = now.strftime("%H00")
 
-    # 공개 API 키 사용 (Python 표준 라이브러리로 요청)
     service_key = "http://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getUltraSrtNcst"
     url = (
         f"{service_key}?serviceKey=d%2B%2B1K%2FR3gY7YV4p2M2%2BfU%2Fw9L23mN%2BFf6I6m3V%2B5f%2B4%3D"
@@ -38,7 +36,6 @@ def get_realtime_weather(nx, ny):
             res_data = response.read().decode('utf-8')
             data = json.loads(res_data)
 
-        # 데이터 파싱
         items = data['response']['body']['items']['item']
         
         weather_dict = {}
@@ -47,12 +44,10 @@ def get_realtime_weather(nx, ny):
             value = float(item['obsrValue'])
             weather_dict[category] = value
 
-        # T1H: 기온(℃), REH: 습도(%), PTY: 강수형태(0:없음, 1:비, 2:비/눈, 3:눈, 5:빗방울, 6:빗방울눈날림, 7:눈날림)
         temp = weather_dict.get('T1H', 20.0)
         reh = int(weather_dict.get('REH', 50))
         pty = int(weather_dict.get('PTY', 0))
 
-        # 강수 형태 문맥 변환
         pty_map = {0: "맑음/구름", 1: "비", 2: "비/눈", 3: "눈", 5: "빗방울", 6: "진눈깨비", 7: "눈날림"}
         condition = pty_map.get(pty, "맑음")
 
@@ -65,7 +60,6 @@ def get_realtime_weather(nx, ny):
         }
 
     except Exception:
-        # 백업 방식: 국립기상과학원 표준 기본 날씨 연동 예외 처리 (서버 문제 대응)
         return {
             "temp": 21.5,
             "condition": "맑음",
@@ -75,13 +69,35 @@ def get_realtime_weather(nx, ny):
         }
 
 
-# 3. 커스텀 다크테마 CSS
+# 3. 버튼 글씨가 선명하게 보이도록 커스텀 CSS 수정
 st.markdown("""
     <style>
+    /* 앱 전체 배경 및 기본 글자색 */
     .stApp {
         background-color: #121218;
         color: #ffffff;
     }
+
+    /* [해결 원인] Streamlit 버튼 가시성 보장 CSS */
+    div[data-testid="stButton"] > button {
+        background-color: #2b2b3d !important;
+        color: #00f2fe !important;
+        border: 1px solid #00f2fe !important;
+        font-weight: bold !important;
+        font-size: 1.1rem !important;
+        padding: 0.6rem 1rem !important;
+        border-radius: 10px !important;
+        transition: all 0.3s ease !important;
+    }
+
+    /* 버튼 마우스 호버 시 효과 */
+    div[data-testid="stButton"] > button:hover {
+        background-color: #00f2fe !important;
+        color: #121218 !important;
+        box-shadow: 0 0 15px rgba(0, 242, 254, 0.5) !important;
+    }
+
+    /* 날씨 카드 디자인 */
     .weather-card {
         background-color: #1e1e2e;
         border-radius: 20px;
@@ -91,6 +107,8 @@ st.markdown("""
         text-align: center;
         margin-bottom: 1.5rem;
     }
+
+    /* 온도 텍스트 */
     .temp-display {
         font-size: clamp(3.5rem, 12vw, 5.5rem);
         font-weight: 800;
@@ -98,6 +116,8 @@ st.markdown("""
         text-shadow: 0 0 20px rgba(0, 242, 254, 0.3);
         margin: 0.5rem 0;
     }
+
+    /* 코디 추천 박스 */
     .recommend-box {
         background-color: #2b2b3d;
         border-radius: 15px;
@@ -106,12 +126,14 @@ st.markdown("""
         margin-top: 1.5rem;
         text-align: left;
     }
+
     .recommend-title {
         font-size: 1.3rem;
         font-weight: bold;
         color: #ffffff;
         margin-bottom: 0.5rem;
     }
+
     .recommend-text {
         font-size: 1.1rem;
         color: #d0d0e0;
@@ -151,7 +173,6 @@ def get_outfit_recommendation(temp, pty):
         outfit = ["두꺼운 패딩", "코트", "목도리", "기모 의류", "장갑"]
         tip = "한파 주의! 방한 용품과 두꺼운 겉옷을 꼭 챙기세요."
 
-    # 강수 형태별 팁
     if pty in [1, 2, 5, 6]:
         tip += " ☔ 비 소식이 있으니 우산을 꼭 챙기세요!"
     elif pty in [3, 7]:
@@ -193,7 +214,6 @@ else:
     pty = weather_info["pty"]
     reh = weather_info["reh"]
 
-    # 날씨 아이콘 설정
     icon = "☀️"
     if pty in [1, 2, 5, 6]:
         icon = "🌧️"
@@ -210,7 +230,6 @@ else:
         st.markdown(f'<div class="temp-display">{icon} {temp}°C</div>', unsafe_allow_html=True)
         st.markdown(f"<p style='font-size: 1.3rem; color: #d0d0e0;'>상태: <b>{condition}</b></p>", unsafe_allow_html=True)
 
-        # 습도 정보
         st.metric("💧 현재 습도", f"{reh}%")
 
         # 옷차림 추천
@@ -231,7 +250,7 @@ else:
 
         st.markdown('</div>', unsafe_allow_html=True)
 
-    # 새로고침 버튼
+    # 마우스를 올리지 않아도 글씨가 뚜렷하게 보이도록 수정된 버튼
     if st.button("🔄 실시간 날씨 새로고침", use_container_width=True):
         st.cache_data.clear()
         st.rerun()
